@@ -1,3 +1,3 @@
-module github.com/kataras/jwt
+module github.com/pourqavam/kataras-jwt
 
-go 1.19
+go 1.20

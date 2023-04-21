@@ -20,10 +20,10 @@ import (
 //
 // Example Code:
 //
-//  verifiedToken, err := jwt.Verify(jwt.HS256, []byte("secret"), token)
-//  [handle error...]
-//  var claims map[string]interface{}
-//  verifiedToken.Claims(&claims)
+//	verifiedToken, err := jwt.Verify(jwt.HS256, []byte("secret"), token)
+//	[handle error...]
+//	var claims map[string]interface{}
+//	verifiedToken.Claims(&claims)
 func Verify(alg Alg, key PublicKey, token []byte, validators ...TokenValidator) (*VerifiedToken, error) {
 	return verifyToken(alg, key, nil, token, nil, validators...)
 }
@@ -89,25 +89,54 @@ func verifyToken(alg Alg, key PublicKey, decrypt InjectFunc, token []byte, heade
 		return nil, err
 	}
 
-	verifiedTok := &VerifiedToken{
-		Token:          token,
-		Header:         header,
-		Payload:        payload,
-		Signature:      signature,
+	verifiedToken := &VerifiedToken{
+		VerifiedTokenBase: VerifiedTokenBase{
+			Token:     token,
+			Header:    header,
+			Payload:   payload,
+			Signature: signature,
+		},
 		StandardClaims: standardClaims,
 		// We could store the standard claims error when Plain token validator is applied
 		// but there is no a single case of its usability, so we don't, unless is requested.
 	}
-	return verifiedTok, nil
+	return verifiedToken, nil
+}
+
+// VerifyBase decodes, verifies and validates custom JWT claims
+// of the given "token" using the algorithm and
+// the secret key that this token was generated with.
+func VerifyBase(alg Alg, key PublicKey, token []byte) (*VerifiedTokenBase, error) {
+	if len(token) == 0 {
+		return nil, ErrMissing
+	}
+
+	header, payload, signature, err := decodeToken(alg, key, token, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	verifiedToken := &VerifiedTokenBase{
+		Token:     token,
+		Header:    header,
+		Payload:   payload,
+		Signature: signature,
+	}
+	return verifiedToken, nil
+}
+
+// VerifiedTokenBase holds the base information about a verified token.
+type VerifiedTokenBase struct {
+	Token     []byte // The original token.
+	Header    []byte // The header (decoded) part.
+	Payload   []byte // The payload (decoded) part.
+	Signature []byte // The signature (decoded) part.
 }
 
 // VerifiedToken holds the information about a verified token.
 // Look `Verify` for more.
 type VerifiedToken struct {
-	Token          []byte // The original token.
-	Header         []byte // The header (decoded) part.
-	Payload        []byte // The payload (decoded) part.
-	Signature      []byte // The signature (decoded) part.
+	VerifiedTokenBase
 	StandardClaims Claims // Any standard claims extracted from the payload.
 }
 
@@ -122,7 +151,7 @@ type VerifiedToken struct {
 // and validated at the `Verify` function itself,
 // therefore NO FURTHER STEP is required
 // to validate the "exp", "iat" and "nbf" claims.
-func (t *VerifiedToken) Claims(dest interface{}) error {
+func (t *VerifiedTokenBase) Claims(dest interface{}) error {
 	return Unmarshal(t.Payload, dest)
 }
 
@@ -132,9 +161,10 @@ var errPayloadNotJSON = errors.New("jwt: payload is not a type of JSON") // malf
 // to allow tokens with plain payload (no JSON or malformed JSON) to be successfully validated.
 //
 // Usage:
-//  verifiedToken, err := jwt.Verify(jwt.HS256, []byte("secret"), token, jwt.Plain)
-//  [handle error...]
-//  [verifiedToken.Payload...]
+//
+//	verifiedToken, err := jwt.Verify(jwt.HS256, []byte("secret"), token, jwt.Plain)
+//	[handle error...]
+//	[verifiedToken.Payload...]
 var Plain = TokenValidatorFunc(func(token []byte, standardClaims Claims, err error) error {
 	if err == errPayloadNotJSON {
 		return nil // skip this error entirely.
